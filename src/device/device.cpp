@@ -1,4 +1,6 @@
 #include <QDir>
+// TASK-002: decouple session lifecycle and byte I/O from adb socket types.
+#include <QDebug>
 #include <QMessageBox>
 #include <QTimer>
 
@@ -11,7 +13,8 @@
 #include "device.h"
 #include "filehandler.h"
 #include "recorder.h"
-#include "server.h"
+#include "adbtransport.h"
+#include "adbprocess.h"
 #include "demuxer.h"
 
 namespace qsc {
@@ -70,18 +73,18 @@ Device::Device(DeviceParams params, QObject *parent) : IDevice(parent), m_params
 
         m_fileHandler = new FileHandler(this);
         m_controller = new Controller([this](const QByteArray& buffer) -> qint64 {
-            if (!m_server || !m_server->getControlSocket()) {
+            if (!m_server || !m_server->controlStream()) {
                 return 0;
             }
 
-            return m_server->getControlSocket()->write(buffer.data(), buffer.length());
+            return m_server->controlStream()->write(buffer.data(), buffer.length());
         }, m_params.gameScript, this);
         m_controller->setCameraMode(isCameraMode());
     }
 
     m_stream = new Demuxer(this);
 
-    m_server = new Server(this);
+    m_server = new AdbTransport(this);
     if (m_params.recordFile && !m_params.recordPath.trimmed().isEmpty()) {
         QString absFilePath;
         QString fileDir(m_params.recordPath);
@@ -212,7 +215,7 @@ void Device::cameraZoomOut()
 
 bool Device::isReversePort(quint16 port)
 {
-    if (m_server && m_server->isReverse() && port == m_server->getParams().localPort) {
+    if (m_server && m_server->isReversePort(port)) {
         return true;
     }
 
@@ -256,7 +259,7 @@ void Device::initSignals()
     }
 
     if (m_server) {
-        connect(m_server, &Server::serverStarted, this, [this](bool success, const QString &deviceName, const QSize &size) {
+        connect(m_server, &Transport::connected, this, [this](bool success, const QString &deviceName, const QSize &size) {
             m_serverStartSuccess = success;
             emit deviceConnected(success, m_params.serial, deviceName, size);
             if (success) {
@@ -281,17 +284,17 @@ void Device::initSignals()
                 }
 
                 // init stream
-                m_stream->installVideoSocket(m_server->removeVideoSocket());
+                m_stream->installVideoStream(m_server->takeVideoStream());
                 m_stream->setFrameSize(size);
                 m_stream->startDecode();
 
                 // recv device msg
-                connect(m_server->getControlSocket(), &QTcpSocket::readyRead, this, [this](){
+                connect(m_server->controlStream(), &QIODevice::readyRead, this, [this](){
                     if (!m_controller) {
                         return;
                     }
 
-                    auto controlSocket = m_server->getControlSocket();
+                    auto controlSocket = m_server->controlStream();
                     while (controlSocket->bytesAvailable()) {
                         QByteArray byteArray = controlSocket->peek(controlSocket->bytesAvailable());
                         DeviceMsg deviceMsg;
@@ -302,7 +305,7 @@ void Device::initSignals()
                         }
                         if (consume < 0) {
                             qCritical("Unsupported device message; closing control socket");
-                            controlSocket->disconnectFromHost();
+                            controlSocket->close();
                             break;
                         }
                         controlSocket->read(consume);
@@ -321,10 +324,10 @@ void Device::initSignals()
                     m_controller->startApp(m_params.startApp);
                 }
             } else {
-                m_server->stop();
+                m_server->close();
             }
         });
-        connect(m_server, &Server::serverStoped, this, [this]() {
+        connect(m_server, &Transport::disconnected, this, [this]() {
             disconnectDevice();
             qDebug() << "server process stop";
         });
@@ -396,40 +399,7 @@ bool Device::connectDevice()
         //m_server->start("192.168.0.174:5555", 27183, m_maxSize, m_bitRate, "");
         // only one devices, serial can be null
         // mark: crop input format: "width:height:x:y" or "" for no crop, for example: "100:200:0:0"
-        Server::ServerParams params;
-        params.serverLocalPath = m_params.serverLocalPath;
-        params.serverRemotePath = m_params.serverRemotePath;
-        params.serial = m_params.serial;
-        params.localPort = m_params.localPort;
-        // scrcpy permits max_size together with flex_display. In that case,
-        // the server constrains each requested virtual-display resize to the
-        // encoder cap.
-        params.maxSize = m_params.maxSize;
-        params.bitRate = m_params.bitRate;
-        params.maxFps = m_params.maxFps;
-        params.videoSource = m_params.videoSource;
-        params.cameraFacing = m_params.cameraFacing;
-        params.cameraId = m_params.cameraId;
-        params.useReverse = m_params.useReverse;
-        params.captureOrientationLock = m_params.captureOrientationLock;
-        params.captureOrientation = m_params.captureOrientation;
-        params.stayAwake = m_params.videoSource == VIDEO_SOURCE_CAMERA ? false : m_params.stayAwake;
-        params.serverVersion = m_params.serverVersion;
-        params.logLevel = m_params.logLevel;
-        params.codecOptions = m_params.codecOptions;
-        params.codecName = m_params.codecName;
-        params.scid = m_params.scid;
-
-        params.crop = m_params.crop;
-        params.displayId = m_params.displayId;
-        params.newDisplay = m_params.newDisplay;
-        params.flexDisplay = m_params.flexDisplay;
-        params.vdDestroyContent = m_params.vdDestroyContent;
-        params.vdSystemDecorations = m_params.vdSystemDecorations;
-        params.displayImePolicy = m_params.displayImePolicy;
-        params.keepActive = m_params.keepActive;
-        params.control = true;
-        m_server->start(params);
+        m_server->open(m_params);
     });
 
     return true;
@@ -440,7 +410,7 @@ void Device::disconnectDevice()
     if (!m_server) {
         return;
     }
-    m_server->stop();
+    m_server->close();
     m_server = Q_NULLPTR;
 
     if (m_stream) {

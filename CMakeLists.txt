@@ -60,6 +60,14 @@ set(QSC_ADB_SOURCES
 )
 source_group(src/adb FILES ${QSC_ADB_SOURCES})
 
+# transport (TASK-002: isolate the existing adb session)
+set(QSC_TRANSPORT_SOURCES
+    src/transport/transport.h
+    src/transport/adbtransport.h
+    src/transport/adbtransport.cpp
+)
+source_group(src/transport FILES ${QSC_TRANSPORT_SOURCES})
+
 # common
 set(QSC_COMMON_SOURCES
     src/common/qscrcpyevent.h
@@ -132,6 +140,7 @@ source_group(src/devicemanage FILES ${QSC_DEVICEMANAGE_SOURCES})
 
 add_library(QtScrcpyCore STATIC
   ${QSC_ADB_SOURCES}
+  ${QSC_TRANSPORT_SOURCES}
   ${QSC_COMMON_SOURCES}
   ${QSC_INCLUDE_SOURCES}
   ${QSC_DEVICE_SOURCES}
@@ -148,6 +157,7 @@ set_target_properties(${QSC_PROJECT_NAME} PROPERTIES
 
 target_include_directories(${QSC_PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(${QSC_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/adb)
+target_include_directories(${QSC_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/transport)
 target_include_directories(${QSC_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/common)
 target_include_directories(${QSC_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/device)
 target_include_directories(${QSC_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/device/filehandler)

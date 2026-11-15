@@ -3,7 +3,8 @@
 
 #include "compat.h"
 #include "demuxer.h"
-#include "videosocket.h"
+// TASK-002: consume the transport byte stream, not an adb socket type.
+#include <QIODevice>
 
 #define HEADER_SIZE 12
 
@@ -68,7 +69,7 @@ void Demuxer::deInit()
     avformat_network_deinit(); // ignore failure
 }
 
-void Demuxer::installVideoSocket(VideoSocket *videoSocket)
+void Demuxer::installVideoStream(QIODevice *videoSocket)
 {
     videoSocket->moveToThread(this);
     m_videoSocket = videoSocket;
@@ -97,8 +98,14 @@ qint32 Demuxer::recvData(quint8 *buf, qint32 bufSize)
         return 0;
     }
 
-    qint32 len = m_videoSocket->subThreadRecvData(buf, bufSize);
-    return len;
+    // Preserve the existing exact-read worker loop. Async users can consume
+    // the same QIODevice through readyRead without blocking their event loop.
+    while (m_videoSocket->bytesAvailable() < bufSize) {
+        if (!m_videoSocket->waitForReadyRead(-1)) {
+            return 0;
+        }
+    }
+    return static_cast<qint32>(m_videoSocket->read(reinterpret_cast<char *>(buf), bufSize));
 }
 
 bool Demuxer::startDecode()

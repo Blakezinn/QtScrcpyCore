@@ -1,5 +1,6 @@
 #ifndef STREAM_H
 #define STREAM_H
+// TASK-002: accept any transport QIODevice rather than VideoSocket.
 
 #include <QPointer>
 #include <QSize>
@@ -11,7 +12,7 @@ extern "C"
 #include "libavformat/avformat.h"
 }
 
-class VideoSocket;
+class QIODevice;
 class Demuxer : public QThread
 {
     Q_OBJECT
@@ -23,7 +24,7 @@ public:
     static bool init();
     static void deInit();
 
-    void installVideoSocket(VideoSocket* videoSocket);
+    void installVideoStream(QIODevice *videoSocket);
     void setFrameSize(const QSize &frameSize);
     bool startDecode();
     void stopDecode();
@@ -44,7 +45,7 @@ protected:
     qint32 recvData(quint8 *buf, qint32 bufSize);
 
 private:
-    QPointer<VideoSocket> m_videoSocket;
+    QPointer<QIODevice> m_videoSocket;
     QSize m_frameSize;
 
     AVCodecContext *m_codecCtx = Q_NULLPTR;

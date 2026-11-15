@@ -12,7 +12,7 @@ class QMouseEvent;
 class QWheelEvent;
 class QKeyEvent;
 class Recorder;
-class Server;
+class Transport;
 class VideoBuffer;
 class IDecoder;
 class FileHandler;
@@ -88,7 +88,7 @@ private:
 
 private:
     // server relevant
-    QPointer<Server> m_server;
+    QPointer<Transport> m_server; // TASK-002: session and bytes through the seam
     bool m_serverStartSuccess = false;
     QPointer<IDecoder> m_decoder;
     QPointer<Controller> m_controller;
