@@ -9,6 +9,11 @@ enum DecodeMode {
 
 namespace qsc {
 
+enum TransportKind {
+    TRANSPORT_ADB = 0,
+    TRANSPORT_RELAY
+};
+
 enum VideoSource {
     VIDEO_SOURCE_DISPLAY = 0,
     VIDEO_SOURCE_CAMERA,
@@ -23,6 +28,13 @@ struct DeviceParams {
     // necessary
     QString serial = "";              // 设备序列号
     QString serverLocalPath = "";     // 本地安卓server路径
+
+    TransportKind transport = TRANSPORT_ADB;
+    QString relayHost = "localhost";
+    quint16 relayCtlPort = 8443;
+    quint16 relayDataPort = 9000;
+    QString relayDeviceId = "phone-01";
+    QString relayToken;
 
     // optional
     QString serverRemotePath = "/data/local/tmp/scrcpy-server.jar";    // 要推送到远端设备的server路径

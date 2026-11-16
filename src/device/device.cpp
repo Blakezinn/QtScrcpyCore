@@ -14,6 +14,7 @@
 #include "filehandler.h"
 #include "recorder.h"
 #include "adbtransport.h"
+#include "relaytransport.h"
 #include "adbprocess.h"
 #include "demuxer.h"
 
@@ -84,7 +85,9 @@ Device::Device(DeviceParams params, QObject *parent) : IDevice(parent), m_params
 
     m_stream = new Demuxer(this);
 
-    m_server = new AdbTransport(this);
+    m_server = m_params.transport == TRANSPORT_RELAY
+            ? static_cast<Transport *>(new RelayTransport(this))
+            : static_cast<Transport *>(new AdbTransport(this));
     if (m_params.recordFile && !m_params.recordPath.trimmed().isEmpty()) {
         QString absFilePath;
         QString fileDir(m_params.recordPath);

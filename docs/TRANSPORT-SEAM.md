@@ -76,3 +76,31 @@ set `QT_FORCE_STDERR_LOGGING=1`, and run
 `transport-smoke <absolute-deploy-directory> <adb-serial> <reverse|forward>`.
 It opens the normal Device path, counts decoded frames for 15 seconds,
 then exercises teardown; exit 0 requires connection and at least one frame.
+
+## qscnet v1 single-socket relay channel (TASK-004)
+
+After authenticated POST /v1/register (role client) and TCP
+"HELLO <session_id>\r\n" to the relay data port, the stream has framed
+messages: **[CH u8][LEN u32 big-endian][payload LEN bytes]**. Maximum LEN
+is 16 MiB. The relay copies these bytes without inspecting them.
+
+- **CH 0xFF**, agent → client, must be the *first* message exactly once.
+  Payload: [name_len u32 BE][name UTF-8][width u32 BE][height u32 BE].
+  name_len must be 1–64; width/height must both be positive.
+- **CH 0x01**, agent → client video. Payload is exactly the scrcpy 4.1
+  demuxer stream bytes: [PTS + flags u64 BE][packet_len u32 BE][packet].
+  Bits 63/62/61 of PTS are SESSION/CONFIG/KEY_FRAME respectively; the
+  remaining 61 bits are microsecond PTS. No inner header is altered.
+- **CH 0x02**, both directions control. Payload is the raw ControlMsg /
+  DeviceMsg bytes already handled by Controller, without extra framing.
+- Unknown channels, oversize payloads, duplicate bootstrap, malformed
+  metadata or premature video/control terminate the TCP session with an
+  explicit protocol error. TCP order is preserved for both channels.
+
+The client parses frames on its socket thread. Video enters a shared buffer
+read by a parentless QIODevice moved to Demuxer, which waits on a mutex/
+condition variable; bytes arriving before that move remain available.
+Control stays in the UI thread. Closing the transport wakes blocked video
+reads and triggers the same Device teardown as the ADB adapter.
+RelayTransport never invokes ADB. TLS, reconnection and encryption belong
+to TASK-009. The Android agent in TASK-005 will implement this wire format.

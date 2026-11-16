@@ -60,11 +60,13 @@ set(QSC_ADB_SOURCES
 )
 source_group(src/adb FILES ${QSC_ADB_SOURCES})
 
-# transport (TASK-002: isolate the existing adb session)
+# transport (TASK-002 ADB and TASK-004 relay)
 set(QSC_TRANSPORT_SOURCES
     src/transport/transport.h
     src/transport/adbtransport.h
     src/transport/adbtransport.cpp
+    src/transport/relaytransport.h
+    src/transport/relaytransport.cpp
 )
 source_group(src/transport FILES ${QSC_TRANSPORT_SOURCES})
 
